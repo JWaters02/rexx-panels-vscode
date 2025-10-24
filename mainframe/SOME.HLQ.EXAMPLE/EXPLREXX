@@ -1,0 +1,96 @@
+/* REXX */
+/* Reads EXPLDFLT, displays EXPLISPF panel, writes to IBMUSER config */
+
+jobname = ""
+jobclass = ""
+pdsname = ""
+editjcl = ""
+path = "ISPF"
+
+user = userid()
+
+/* Read default values from EXPLDFLT */
+"ALLOC FI(DEFFILE) DA('EXPLDFLT') SHR REUSE"
+if rc = 0 then do
+  "EXECIO * DISKR DEFFILE (STEM defaults. FINIS"
+  "FREE FI(DEFFILE)"
+  
+  /* Parse default values */
+  do i = 1 to defaults.0
+    parse var defaults.i keyword '=' value
+    keyword = strip(keyword)
+    value = strip(value)
+    
+    select
+      when keyword = 'jobclass' then jobclass = value
+      when keyword = 'pdsname' then pdsname = value  
+      when keyword = 'editjcl' then editjcl = value
+      otherwise nop
+    end
+  end
+end
+else do
+  say "Warning: Could not read EXPLDFLT file, using blank defaults"
+end
+
+if jobname = "" then jobname = user"$"
+
+do forever
+  "ISPEXEC DISPLAY PANEL(EXPLISPF)"
+  
+  if rc = 8 then leave  /* PF3 pressed */
+  if rc = 0 then leave  /* Enter pressed */
+  
+  /* Handle other return codes if needed */
+  if rc > 8 then do
+    say "Panel error, RC=" rc
+    exit rc
+  end
+end
+
+/* If user pressed Enter (RC=0), save the values */
+if rc = 0 then do
+  /* Write updated values to config file */
+  user_config = "SOME.HLQ.EXAMPLE.CONFIGS("user")"
+  "ALLOC FI(USERFILE) DA('"user_config"') SHR REUSE"
+  if rc = 0 then do
+    output.1 = "jobname = " || jobname
+    output.2 = "jobclass = " || jobclass  
+    output.3 = "pdsname = " || pdsname
+    output.4 = "editjcl = " || editjcl
+    output.5 = "path = ISPF"
+    output.0 = 5
+    
+    /* Write to file */
+    "EXECIO * DISKW USERFILE (STEM output. FINIS"
+    if rc = 0 then do
+      say "Configuration saved to " user_config " file"
+      
+      /* Free the file before executing the next program */
+      "FREE FI(USERFILE)"
+      
+      /* Execute EXPLREXJ with the config dataset as input */
+      say "Executing EXPLREXJ with config: " user_config
+      "EXEC 'SOME.HLQ.EXAMPLE.EXPLREXJ' '" || user_config || "'"
+      exec_rc = rc
+      if exec_rc = 0 then do
+        say "EXPLREXJ completed successfully"
+      end
+      else do
+        say "EXPLREXJ failed with RC=" exec_rc
+      end
+    end
+    else do
+      say "Error writing to config file, RC=" rc
+      "FREE FI(USERFILE)"
+    end
+  end
+  else do
+    say "Error: Could not allocate config file for writing"
+  end
+end
+else do
+  say "Operation cancelled by user"
+end
+
+exit 0

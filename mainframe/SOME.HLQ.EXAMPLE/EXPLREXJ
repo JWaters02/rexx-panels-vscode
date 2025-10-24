@@ -1,0 +1,127 @@
+/* REXX - Generate JCL from config file and skeleton */
+/* Reads user config, processes skeleton JCL, submits or edits based on settings */
+
+jobname = ""
+jobclass = ""
+pdsname = ""
+editjcl = ""
+path = ""
+
+user = user()
+
+/* Read user's config file */
+user_config = "SOME.HLQ.EXAMPLE.CONFIGS("user")"
+"ALLOC FI(USERFILE) DA('"user_config"') SHR REUSE"
+if rc \= 0 then do
+  say "Error: Could not read config file for user" user
+  exit 8
+end
+
+"EXECIO * DISKR USERFILE (STEM config. FINIS"
+"FREE FI(USERFILE)"
+
+/* Parse config values */
+do i = 1 to config.0
+  parse var config.i keyword '=' value
+  keyword = strip(keyword)
+  value = strip(value)
+  
+  select
+    when keyword = 'jobname' then jobname = value
+    when keyword = 'jobclass' then jobclass = value
+    when keyword = 'pdsname' then pdsname = value  
+    when keyword = 'editjcl' then editjcl = value
+    when keyword = 'path' then path = value
+    otherwise nop
+  end
+end
+
+/* Read skeleton JCL */
+"ALLOC FI(SKELFILE) DA('SOME.HLQ.EXAMPLE(EXPLSJCL)') SHR REUSE"
+if rc \= 0 then do
+  say "Error: Could not read skeleton JCL file"
+  exit 8
+end
+
+"EXECIO * DISKR SKELFILE (STEM skeleton. FINIS"
+"FREE FI(SKELFILE)"
+
+/* Process skeleton and substitute variables */
+do i = 1 to skeleton.0
+  line = skeleton.i
+  
+  /* Replace skeleton variables with config values */
+  line = translate(line, jobname, '&JOBNAME')
+  line = translate(line, jobclass, '&JOBCLASS') 
+  line = translate(line, pdsname, '&PDSNAME')
+  line = translate(line, user, '&SYSUID')
+  
+  /* Handle multiple occurrences */
+  line = changestr('&JOBNAME', line, jobname)
+  line = changestr('&JOBCLASS', line, jobclass)
+  line = changestr('&PDSNAME', line, pdsname)
+  line = changestr('&SYSUID', line, user)
+  
+  jcl.i = line
+end
+jcl.0 = skeleton.0
+
+/* Create temporary JCL dataset */
+temp_jcl = user".TEMP.JCL("jobname")"
+"ALLOC FI(TEMPJCL) DA('"temp_jcl"') NEW CATALOG SPACE(5,5) TRACKS",
+       "LRECL(80) BLKSIZE(800) RECFM(F,B)"
+if rc \= 0 then do
+  say "Error: Could not allocate temporary JCL dataset"
+  exit 8
+end
+
+/* Write generated JCL to temporary dataset */
+"EXECIO * DISKW TEMPJCL (STEM jcl. FINIS"
+"FREE FI(TEMPJCL)"
+
+/* Process based on path and editjcl settings */
+select
+  when path = 'VSC' then do
+    say "SUCCESS"
+    exit 0
+  end
+  
+  when editjcl = 'Y' then do
+    /* Edit the JCL */
+    "ISPEXEC EDIT DATASET('"temp_jcl"')"
+    if rc = 0 then do
+      say "JCL editing completed"
+    end
+    else do
+      say "Error during JCL edit, RC=" rc
+    end
+  end
+  
+  otherwise do
+    /* Submit the JCL */
+    "ALLOC FI(INTRDR) SYSOUT(A) WRITER(INTRDR)"
+    if rc = 0 then do
+      "ALLOC FI(JCLSUB) DA('"temp_jcl"') SHR REUSE"
+      "EXECIO * DISKR JCLSUB (STEM submit. FINIS"
+      "FREE FI(JCLSUB)"
+      
+      "EXECIO * DISKW INTRDR (STEM submit. FINIS"
+      "FREE FI(INTRDR)"
+      
+      if rc = 0 then do
+        say "JCL submitted successfully"
+      end
+      else do
+        say "Error submitting JCL, RC=" rc
+      end
+    end
+    else do
+      say "Error allocating internal reader"
+    end
+  end
+end
+
+/* Clean up temporary dataset */
+"DELETE '"temp_jcl"'"
+
+exit 0

@@ -1,0 +1,9 @@
+.vscode/**
+out/**/*.map
+src/**
+vsix/**
+.gitignore
+.gitattributes
+.prettierignore
+tsconfig.json
+eslint.config.mjs

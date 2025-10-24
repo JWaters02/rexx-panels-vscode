@@ -1,0 +1,27 @@
+)ATTR
+$  TYPE(OUTPUT) INTENS(HIGH) COLOR(YELLOW) CAPS(OFF)
+<  TYPE(TEXT) INTENS(LOW)
++  TYPE(INPUT) INTENS(HIGH) HILITE(USCORE) CAPS(On)
+!  TYPE(TEXT) INTENS(LOW) SKIP(ON)
+£  TYPE(TEXT) INTENS(HIGH) COLOR(PINK)
+;  TYPE(INPUT) INTENS(HIGH) HILITE(USCORE) CAPS(OFF)
+)BODY
+<*-----------------------------EXAMPLE<------------------------------------*
+ Command ===>+ZCM                                                            !
+    Job name             ===>+jobname !
+    Job class            ===>+z!
+
+    PDS name             ===>+pdsname
+
+    Edit JCL             ===>+z!       £(Y/N) Edit or Submit<
+
+
+£Enter: Edit or Submit  PF3: End< £Jobname and Jobclass may be changed<
+)INIT
+  .zvars = '(jobclass,editjcl)'
+  .CURSOR = pdsname
+)PROC
+  VER (&pdsname,NB)
+  VER (&editjcl,NB,list,Y,N)
+  VER (&jobclass,NB,list,s,S,m,M,l,L)
+)END

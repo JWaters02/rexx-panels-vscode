@@ -1,0 +1,5 @@
+jobname = IBMUSER$
+jobclass = S
+pdsname = SOME.HLQ.PDSNAME
+editjcl = N
+path = VSC
